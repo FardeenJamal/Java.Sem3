@@ -1,0 +1,803 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+INVESTMENT TRACKER SOURCE CODE
+
+import javax.swing.*;
+import javax.swing.border.Border;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import javax.swing.table.DefaultTableModel;
+import java.net.URL;
+import org.json.JSONObject;
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.data.category.DefaultCategoryDataset;
+import java.util.Random;
+
+public class Investments extends JFrame {
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/investment_tracker";
+    private static final String DB_USERNAME = "root";
+    private static final String DB_PASSWORD = "Investment";
+    private static final String API_URL = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=";
+    private static final String API_KEY = "X3K268VVLVQPGQG9";
+
+    private static Connection conn;
+    private int userId;
+    private JTabbedPane tabbedPane; // Make tabbedPane a member variable
+
+    // Trivia questions and answers
+    private String[][] triviaQuestions = {
+        {"The stock market is a place where investors buy and sell ownership in publicly traded companies.", "True"},
+        {"A stock dividend is a payment made to shareholders in the form of additional shares of stock.", "False"},
+        {"Bonds are typically considered a more risky investment than stocks.", "False"},
+        {"The Dow Jones Industrial Average (DJIA) is made up of 50 companies listed on the New York Stock Exchange.", "False"},
+        {"A \"bull market\" refers to a period when stock prices are generally falling.", "False"},
+        {"The primary market is where stocks are first issued to the public in an Initial Public Offering (IPO).", "True"},
+        {"In a \"bear market,\" investors tend to be optimistic about the future and purchase stocks aggressively.", "False"},
+        {"A stock split increases the price of a company's shares by dividing the shares into smaller units.", "False"},
+        {"The NASDAQ Composite Index includes all stocks listed on the NASDAQ stock exchange.", "False"},
+        {"Short selling allows an investor to profit from the price increase of a stock.", "False"},
+        {"Blue-chip stocks are typically considered high-risk investments.", "False"},
+        {"The price-to-earnings (P/E) ratio measures the profitability of a company relative to its stock price.", "True"},
+        {"A stock's market capitalization is calculated by multiplying the stock's current price by the total number of shares outstanding.", "True"},
+        {"A stockbroker is a person who invests their own money in the stock market on behalf of clients.", "False"},
+        {"A limit order is an instruction to buy or sell a stock at a specific price or better.", "True"}
+    };
+
+    private String currentQuestion;
+    private String currentAnswer;
+
+    public Investments() {
+        setTitle("Stock Investment Tracker");
+        setSize(1000, 650);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+        setBackground(new Color(45, 45, 45));
+
+        // Uniform color scheme
+        UIManager.put("Panel.background", new Color(30, 30, 30));
+        UIManager.put("Label.foreground", Color.WHITE);
+        UIManager.put("Button.background", new Color(50, 150, 250));
+        UIManager.put("Button.foreground", Color.WHITE);
+        UIManager.put("Button.font", new Font("Arial", Font.PLAIN, 14));
+        UIManager.put("TextField.background", Color.WHITE);
+        UIManager.put("TextField.foreground", Color.BLACK);
+        UIManager.put("Table.background", Color.WHITE);
+        UIManager.put("Table.foreground", Color.BLACK);
+        UIManager.put("OptionPane.background", Color.WHITE);
+        UIManager.put("OptionPane.foreground", Color.BLACK);
+
+        tabbedPane = new JTabbedPane(); // Initialize the tabbedPane
+        JPanel loginPanel = createLoginPanel();
+        JPanel createAccountPanel = createAccountPanel();
+        JPanel companyPanel = createCompanyPanel();
+        JPanel viewInvestmentsPanel = createViewInvestmentsPanel();
+        JPanel triviaPanel = createTriviaPanel(); // Create trivia panel
+
+        tabbedPane.addTab("Login", loginPanel);
+        tabbedPane.addTab("Create Account", createAccountPanel);
+        tabbedPane.addTab("Enter Investment", companyPanel);
+        tabbedPane.addTab("Portfolio", viewInvestmentsPanel);
+        tabbedPane.addTab("Trivia", triviaPanel); // Add trivia tab
+
+        // Disable Enter Investment and View Investments tabs initially
+        tabbedPane.setEnabledAt(2, false);
+        tabbedPane.setEnabledAt(3, false);
+        tabbedPane.setEnabledAt(4, false); // Disable Trivia tab
+
+        add(tabbedPane);
+    }
+
+    private JPanel createCompanyPanel() {
+        JPanel companyPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.fill = GridBagConstraints.BOTH;
+
+        // Main panel for splitting the layout
+        JPanel mainPanel = new JPanel(new GridLayout(1, 3)); // Two equal halves
+
+        // Left side for investment entry
+        JPanel investmentPanel = new JPanel();
+        investmentPanel.setLayout(new GridBagLayout());
+        investmentPanel.setBackground(new Color(30, 30, 30));
+
+        JLabel headingLabel = new JLabel("Enter Investment", JLabel.CENTER);
+        headingLabel.setFont(new Font("Serif", Font.BOLD, 22));
+
+        JLabel companyLabel = new JLabel("Enter Company Ticker:");
+        JTextField companyField = new JTextField(15);
+        JLabel quantityLabel = new JLabel("Enter Quantity:");
+        JTextField quantityField = new JTextField(15);
+        JButton companySubmitButton = new CustomButton("Submit Investment");
+        JButton sellButton = new CustomButton("Sell Investment");
+        JButton logoutButton = new JButton("Logout");
+
+        logoutButton.setBackground(Color.RED);
+        logoutButton.addActionListener(e -> logout());
+
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        investmentPanel.add(headingLabel, gbc);
+        gbc.gridy = 1;
+        investmentPanel.add(companyLabel, gbc);
+        gbc.gridy = 2;
+        investmentPanel.add(companyField, gbc);
+        gbc.gridy = 3;
+        investmentPanel.add(quantityLabel, gbc);
+        gbc.gridy = 4;
+        investmentPanel.add(quantityField, gbc);
+        gbc.gridy = 5;
+        investmentPanel.add(companySubmitButton, gbc);
+        gbc.gridy = 6;
+        investmentPanel.add(sellButton, gbc);
+        gbc.gridy = 7;
+        investmentPanel.add(logoutButton, gbc);
+
+        companySubmitButton.addActionListener(e -> {
+            String ticker = companyField.getText().toUpperCase();
+            String quantityStr = quantityField.getText();
+
+            try {
+                double quantity = Double.parseDouble(quantityStr);
+                double price = fetchStockPrice(ticker);
+
+                if (price != -1) {
+                    double totalValue = price * quantity;
+                    showMessageDialog(String.format("Total Investment Value: $%.2f", totalValue));
+
+                    saveOrUpdateInvestment(userId, ticker, quantity, totalValue);
+                    showMessageDialog("Investment saved successfully!");
+                } else {
+                    showMessageDialog("Failed to fetch stock price. Please try again.");
+                }
+            } catch (NumberFormatException ex) {
+                showMessageDialog("Invalid quantity. Please enter a numeric value.");
+            }
+        });
+
+        sellButton.addActionListener(e -> {
+            String ticker = companyField.getText().toUpperCase();
+            String quantityStr = quantityField.getText();
+
+            try {
+                double quantity = Double.parseDouble(quantityStr);
+                double currentQuantity = getCurrentInvestmentQuantity(userId, ticker);
+
+                if (quantity > currentQuantity) {
+                    showMessageDialog("Invalid quantity");
+                } else {
+                    sellInvestment(userId, ticker, quantity);
+                    showMessageDialog("Investment sold successfully!");
+                }
+            } catch (NumberFormatException ex) {
+                showMessageDialog("Invalid quantity. Please enter a numeric value.");
+            }
+        });
+
+        JPanel separatorPanel = new JPanel();
+        separatorPanel.setPreferredSize(new Dimension(0, 0)); 
+        separatorPanel.setBackground(new Color(30, 30, 30)); 
+        
+        // Right side for calculator
+        JPanel calcPanel = new JPanel();
+        calcPanel.setLayout(new GridBagLayout());
+        calcPanel.setBackground(new Color(30, 30, 30)); // Same background as other panels
+
+        JLabel calcHeadingLabel = new JLabel("Investment Calculator");
+        calcHeadingLabel.setForeground(Color.WHITE);
+        calcHeadingLabel.setFont(new Font("Serif", Font.BOLD, 22));
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        calcPanel.add(calcHeadingLabel, gbc);
+
+        JLabel investAmountLabel = new JLabel("Investment Amount:");
+        JTextField investAmountField = new JTextField(15); // Uniform size
+        JLabel expectedReturnLabel = new JLabel("Expected Return (%):");
+        JTextField expectedReturnField = new JTextField(15); // Uniform size
+        JButton calculateButton = new CustomButton("Calculate");
+        JLabel resultLabel = new JLabel(""); // Label to display the result
+        resultLabel.setForeground(Color.WHITE);
+        
+        // Add spacing for the result label
+        gbc.gridy = 1;
+        calcPanel.add(investAmountLabel, gbc);
+        gbc.gridy = 2;
+        calcPanel.add(investAmountField, gbc);
+        gbc.gridy = 3;
+        calcPanel.add(expectedReturnLabel, gbc);
+        gbc.gridy = 4;
+        calcPanel.add(expectedReturnField, gbc);
+        gbc.gridy = 5;
+        calcPanel.add(calculateButton, gbc);
+        gbc.gridy = 6;
+        calcPanel.add(Box.createVerticalStrut(15), gbc); // Space before result label
+        gbc.gridy = 7;
+        calcPanel.add(resultLabel, gbc); // Add result label to the panel
+
+        // Add action listener for calculate button
+        calculateButton.addActionListener(e -> {
+            try {
+                double investmentAmount = Double.parseDouble(investAmountField.getText());
+                double expectedReturn = Double.parseDouble(expectedReturnField.getText()) / 100; // Convert percentage to decimal
+                double estimatedReturn = investmentAmount * expectedReturn;
+                resultLabel.setText(String.format("Estimated Return: $%.2f", estimatedReturn));
+            } catch (NumberFormatException ex) {
+                showMessageDialog("Please enter valid numbers for investment and return.");
+            }
+        });
+
+        // Add both panels to the main panel
+        mainPanel.add(investmentPanel);
+        mainPanel.add(separatorPanel);
+        mainPanel.add(calcPanel); // Add calculator panel without a separator
+
+        // Add the main panel to the company panel
+        companyPanel.add(mainPanel); 
+
+        return companyPanel;
+    }
+
+    private JPanel createTriviaPanel() {
+        JPanel triviaPanel = new JPanel();
+        triviaPanel.setLayout(new BoxLayout(triviaPanel, BoxLayout.Y_AXIS));
+        triviaPanel.setBackground(new Color(30, 30, 30));
+
+        // Randomly select a trivia question
+        int randomIndex = new Random().nextInt(triviaQuestions.length);
+        currentQuestion = triviaQuestions[randomIndex][0];
+        currentAnswer = triviaQuestions[randomIndex][1];
+
+        JLabel questionLabel = new JLabel(currentQuestion);
+        questionLabel.setForeground(Color.WHITE);
+        questionLabel.setFont(new Font("Arial", Font.BOLD, 24)); // Increased font size
+        questionLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        triviaPanel.add(Box.createVerticalGlue()); // Add vertical glue for centering
+        triviaPanel.add(questionLabel);
+        triviaPanel.add(Box.createVerticalGlue()); // Add vertical glue for centering
+
+        // Create a panel for the buttons
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setBackground(new Color(30, 30, 30));
+        buttonPanel.setLayout(new FlowLayout(FlowLayout.CENTER)); // Center buttons
+        JButton trueButton = new CustomButton("True");
+        JButton falseButton = new CustomButton("False");
+
+        buttonPanel.add(trueButton);
+        buttonPanel.add(falseButton);
+        triviaPanel.add(buttonPanel); // Add button panel to trivia panel
+
+        // Add action listeners
+        trueButton.addActionListener(e -> processAnswer("True", triviaPanel));
+        falseButton.addActionListener(e -> processAnswer("False", triviaPanel));
+
+        return triviaPanel;
+    }
+
+    private void processAnswer(String userAnswer, JPanel triviaPanel) {
+        String message;
+        if (userAnswer.equals(currentAnswer)) {
+            // Assuming Apple stock as an example
+            String ticker = "AAPL";
+            double price = fetchStockPrice(ticker);
+            saveOrUpdateInvestment(userId, ticker, 1, price); // Add one stock
+            
+            // Change trivia panel background color to green
+            triviaPanel.setBackground(Color.GREEN);
+            message = String.format("Congratulations, you just won 1 stock of %s worth $%.2f !!", ticker, price);
+            
+            // Add celebration effect
+            showCelebrationEffect(triviaPanel);
+        } else {
+            // Change trivia panel background color to red for wrong answer
+            triviaPanel.setBackground(Color.RED);
+            message = "Better luck next time!";
+            
+            // Reset background to original color after a few seconds
+            Timer timer = new Timer(3000, e -> {
+                triviaPanel.setBackground(new Color(30, 30, 30));
+                triviaPanel.revalidate();
+                triviaPanel.repaint();
+            });
+            timer.setRepeats(false);
+            timer.start();
+        }
+        
+        showMessageDialog(message);
+    }
+
+    private void showCelebrationEffect(JPanel triviaPanel) {
+        // Create a label for celebration
+        JLabel celebrationLabel = new JLabel("✨✨✨✨");
+        celebrationLabel.setFont(new Font("Serif", Font.BOLD, 100));
+        celebrationLabel.setForeground(Color.WHITE);
+        celebrationLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        
+        triviaPanel.add(celebrationLabel);
+        triviaPanel.revalidate(); // Refresh the panel to show the new label
+        triviaPanel.repaint();
+        
+        // Optional: Add a timer to remove the celebration after a few seconds
+        Timer timer = new Timer(3000, e -> {
+            triviaPanel.remove(celebrationLabel);
+            triviaPanel.setBackground(new Color(30, 30, 30)); // Reset to original color
+            triviaPanel.revalidate();
+            triviaPanel.repaint();
+        });
+        timer.setRepeats(false);
+        timer.start();
+    }
+
+    private JPanel createLoginPanel() {
+        JPanel loginPanel = new JPanel(new GridBagLayout());
+        JPanel contentPanel = new JPanel(new GridBagLayout());
+        contentPanel.setBackground(Color.WHITE); // White background for the content box
+        contentPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5)); // Padding around content
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        JLabel titleLabel = new JLabel("INVESTMENT TRACKER", JLabel.CENTER);
+        titleLabel.setFont(new Font("Serif", Font.BOLD, 22));
+        titleLabel.setForeground(Color.BLACK); // Set heading color to black
+
+        JLabel usernameLabel = new JLabel("Username:");
+        usernameLabel.setForeground(Color.BLACK); // Set label color to black
+        JTextField usernameField = new JTextField(15);
+        JLabel passwordLabel = new JLabel("Password:");
+        passwordLabel.setForeground(Color.BLACK); // Set label color to black
+        JPasswordField passwordField = new JPasswordField(15);
+        JButton submitButton = new CustomButton("Login");
+        JButton createAccountButton = new CustomButton("Create Account");
+
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        contentPanel.add(titleLabel, gbc);
+        gbc.gridy = 1;
+        contentPanel.add(usernameLabel, gbc);
+        gbc.gridy = 2;
+        contentPanel.add(usernameField, gbc);
+        gbc.gridy = 3;
+        contentPanel.add(passwordLabel, gbc);
+        gbc.gridy = 4;
+        contentPanel.add(passwordField, gbc);
+        gbc.gridy = 5;
+        contentPanel.add(submitButton, gbc);
+        gbc.gridy = 6;
+        contentPanel.add(createAccountButton, gbc);
+ 
+        submitButton.addActionListener(e -> {
+            String username = usernameField.getText();
+            String password = new String(passwordField.getPassword());
+
+            if (login(username, password)) {
+                showWelcomeScreen(username); // Show welcome screen instead of dialog
+                tabbedPane.setEnabledAt(2, true); // Enable Enter Investment tab
+                tabbedPane.setEnabledAt(3, true); // Enable View Investments tab
+                tabbedPane.setEnabledAt(4, true); // Enable Trivia tab
+            } else {
+                showMessageDialog("Invalid username or password.");
+            }
+        });
+
+        createAccountButton.addActionListener(e -> tabbedPane.setSelectedIndex(1)); // Switch to Create Account tab
+
+        loginPanel.add(contentPanel);
+        return loginPanel;
+    }
+
+    private void showWelcomeScreen(String username) {
+        JFrame welcomeFrame = new JFrame("Welcome");
+        welcomeFrame.setSize(500, 300);
+        welcomeFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        welcomeFrame.setLocationRelativeTo(null);
+        welcomeFrame.getContentPane().setBackground(Color.WHITE);
+
+        JLabel welcomeLabel = new JLabel("<html><div style='text-align: center;'><span style='font-size: 30px; font-weight: bold;'>Welcome " + username + "!</span><br><br><br><br><span style='font-size: 14px;'>Please note that all stock market investments carry risks, including the potential loss of capital. Past performance of stocks or any security is not indicative of future results. Always conduct thorough research or consult with a financial advisor before making investment decisions. This application provides information for tracking purposes only and should not be considered as financial advice.</span></div></html>", JLabel.CENTER);
+welcomeLabel.setForeground(Color.BLACK);
+welcomeLabel.setFont(new Font("Arial", Font.PLAIN, 14));
+welcomeFrame.add(welcomeLabel);
+
+
+        welcomeFrame.setVisible(true);
+
+        // Set a timer to close the welcome screen after 7 seconds
+        Timer timer = new Timer(7000, e -> {
+            welcomeFrame.dispose(); // Close the welcome frame
+            tabbedPane.setSelectedIndex(2); // Switch to Enter Investment tab
+        });
+        timer.setRepeats(false);
+        timer.start();
+
+        // Additionally, focus the welcome frame
+        welcomeFrame.addWindowFocusListener(new WindowFocusListener() {
+            @Override
+            public void windowGainedFocus(WindowEvent e) {
+                // Bring the welcome frame to the front
+                welcomeFrame.toFront();
+                welcomeFrame.requestFocus();
+            }
+
+            @Override
+            public void windowLostFocus(WindowEvent e) {
+                // Do nothing
+            }
+        });
+    }
+
+    private JPanel createAccountPanel() {
+        JPanel createAccountPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        JLabel headingLabel = new JLabel("Create Account", JLabel.CENTER);
+        headingLabel.setFont(new Font("Serif", Font.BOLD, 22));
+        JLabel newUsernameLabel = new JLabel("New Username:");
+        JTextField newUsernameField = new JTextField(15);
+        JLabel newPasswordLabel = new JLabel("New Password:");
+        JPasswordField newPasswordField = new JPasswordField(15);
+        JButton createButton = new CustomButton("Create Account");
+        JButton backButton = new CustomButton("Back to Login");
+
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        createAccountPanel.add(headingLabel, gbc);
+        gbc.gridy = 1;
+        createAccountPanel.add(newUsernameLabel, gbc);
+        gbc.gridy = 2;
+        createAccountPanel.add(newUsernameField, gbc);
+        gbc.gridy = 3;
+        createAccountPanel.add(newPasswordLabel, gbc);
+        gbc.gridy = 4;
+        createAccountPanel.add(newPasswordField, gbc);
+        gbc.gridy = 5;
+        createAccountPanel.add(createButton, gbc);
+        gbc.gridy = 6;
+        createAccountPanel.add(backButton, gbc);
+
+        createButton.addActionListener(e -> {
+            String newUsername = newUsernameField.getText();
+            String newPassword = new String(newPasswordField.getPassword());
+
+            if (createAccount(newUsername, newPassword)) {
+                showMessageDialog("Account created successfully!");
+                tabbedPane.setSelectedIndex(0); // Switch to Login tab
+            } else {
+                showMessageDialog("Error creating account. Please try again.");
+            }
+        });
+
+        backButton.addActionListener(e -> tabbedPane.setSelectedIndex(0)); // Switch to Login tab
+
+        return createAccountPanel;
+    }
+
+    private JPanel createViewInvestmentsPanel() {
+        JPanel viewInvestmentsPanel = new JPanel(new BorderLayout());
+        JTable investmentsTable = new JTable();
+        JScrollPane scrollPane = new JScrollPane(investmentsTable);
+        viewInvestmentsPanel.add(scrollPane, BorderLayout.CENTER);
+
+        JLabel totalInvestmentLabel = new JLabel("Total Investment Value: $0.00", JLabel.CENTER);
+        totalInvestmentLabel.setFont(new Font("Serif", Font.BOLD, 16));
+        viewInvestmentsPanel.add(totalInvestmentLabel, BorderLayout.SOUTH);
+        
+        JPanel chartPanel = createChartPanel();
+        viewInvestmentsPanel.add(chartPanel, BorderLayout.NORTH);
+        viewInvestmentsPanel.setBackground(new Color(30, 30, 30));
+
+        viewInvestmentsPanel.addComponentListener(new ComponentAdapter() {
+            public void componentShown(ComponentEvent e) {
+                displayInvestments(investmentsTable, totalInvestmentLabel);
+            }
+        });
+
+        return viewInvestmentsPanel;
+    }
+
+    private JPanel createChartPanel() {
+        DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+        // Generate random sample data for 12 months
+        double[] sp500Values = {3850.4, 3990.7, 4075.8, 4120.6, 4205.2, 4300.1, 4415.3, 4510.8, 4630.9, 4750.6, 4825.1};
+
+for (int i = 0; i < sp500Values.length; i++) {
+    dataset.addValue(sp500Values[i], "Stock Price", "Month " + (i + 1));
+}
+
+
+        JFreeChart lineChart = ChartFactory.createLineChart(
+                "S&P 500",
+                "Month",
+                "Value",
+                dataset
+        );
+
+        ChartPanel chartPanel = new ChartPanel(lineChart);
+        chartPanel.setPreferredSize(new Dimension(800, 300));
+        return chartPanel;
+    }
+
+  
+    private void logout() {
+        showMessageDialog("You have logged out.");
+        userId = -1; // Reset userId
+        setVisible(false);
+        new Investments().setVisible(true);
+    }
+
+    private static void connectToDatabase() {
+        try {
+            conn = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private boolean login(String username, String password) {
+        try {
+            PreparedStatement ps = conn.prepareStatement("SELECT * FROM users WHERE username = ? AND password = ?");
+            ps.setString(1, username);
+            ps.setString(2, password);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                userId = rs.getInt("user_id");
+                return true;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    private boolean createAccount(String username, String password) {
+        try {
+            PreparedStatement ps = conn.prepareStatement("INSERT INTO users (username, password) VALUES (?, ?)");
+            ps.setString(1, username);
+            ps.setString(2, password);
+            ps.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    private double fetchStockPrice(String ticker) {
+        try {
+            URL url = new URL(API_URL + ticker + "&apikey=" + API_KEY);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            String inputLine;
+            StringBuilder content = new StringBuilder();
+
+            while ((inputLine = in.readLine()) != null) {
+                content.append(inputLine);
+            }
+            in.close();
+
+            JSONObject json = new JSONObject(content.toString());
+            return json.getJSONObject("Global Quote").getDouble("05. price");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return -1;
+    }
+
+    private void saveOrUpdateInvestment(int userId, String ticker, double quantity, double totalValue) {
+    try {
+        PreparedStatement checkStmt = conn.prepareStatement(
+                "SELECT investment_id, total_value FROM investments WHERE user_id = ? AND company_ticker = ?");
+        checkStmt.setInt(1, userId);
+        checkStmt.setString(2, ticker);
+        ResultSet rs = checkStmt.executeQuery();
+
+        if (rs.next()) {
+            // Retrieve the existing total value
+            double existingTotalValue = rs.getDouble("total_value");
+            double newTotalValue = existingTotalValue + totalValue; // Update the total value
+
+            PreparedStatement updateStmt = conn.prepareStatement(
+                    "UPDATE investments SET quantity = quantity + ?, total_value = ? WHERE user_id = ? AND company_ticker = ?");
+            updateStmt.setDouble(1, quantity);
+            updateStmt.setDouble(2, newTotalValue);
+            updateStmt.setInt(3, userId);
+            updateStmt.setString(4, ticker);
+            updateStmt.executeUpdate();
+        } else {
+            PreparedStatement insertStmt = conn.prepareStatement(
+                    "INSERT INTO investments (user_id, company_ticker, quantity, total_value) VALUES (?, ?, ?, ?)");
+            insertStmt.setInt(1, userId);
+            insertStmt.setString(2, ticker);
+            insertStmt.setDouble(3, quantity);
+            insertStmt.setDouble(4, totalValue);
+            insertStmt.executeUpdate();
+        }
+    } catch (SQLException e) {
+        e.printStackTrace();
+    }
+}
+
+    private void sellInvestment(int userId, String ticker, double quantity) {
+        try {
+            PreparedStatement ps = conn.prepareStatement("SELECT quantity FROM investments WHERE user_id = ? AND company_ticker = ?");
+            ps.setInt(1, userId);
+            ps.setString(2, ticker);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                double currentQuantity = rs.getDouble("quantity");
+                double newQuantity = currentQuantity - quantity;
+
+                if (newQuantity <= 0) {
+                    PreparedStatement deleteStmt = conn.prepareStatement("DELETE FROM investments WHERE user_id = ? AND company_ticker = ?");
+                    deleteStmt.setInt(1, userId);
+                    deleteStmt.setString(2, ticker);
+                    deleteStmt.executeUpdate();
+                } else {
+                    PreparedStatement updateStmt = conn.prepareStatement("UPDATE investments SET quantity = ? WHERE user_id = ? AND company_ticker = ?");
+                    updateStmt.setDouble(1, newQuantity);
+                    updateStmt.setInt(2, userId);
+                    updateStmt.setString(3, ticker);
+                    updateStmt.executeUpdate();
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private double getCurrentInvestmentQuantity(int userId, String ticker) {
+        double currentQuantity = 0;
+        try {
+            PreparedStatement ps = conn.prepareStatement("SELECT quantity FROM investments WHERE user_id = ? AND company_ticker = ?");
+            ps.setInt(1, userId);
+            ps.setString(2, ticker);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                currentQuantity = rs.getDouble("quantity");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return currentQuantity;
+    }
+
+    private void displayInvestments(JTable table, JLabel totalInvestmentLabel) {
+        try {
+            DefaultTableModel model = new DefaultTableModel(new String[]{"Ticker", "Quantity", "Total Value"}, 0);
+            PreparedStatement ps = conn.prepareStatement("SELECT company_ticker, quantity, total_value FROM investments WHERE user_id = ?");
+            ps.setInt(1, userId);
+            ResultSet rs = ps.executeQuery();
+            double totalInvestment = 0;
+
+            while (rs.next()) {
+                String ticker = rs.getString("company_ticker");
+                double quantity = rs.getDouble("quantity");
+                double totalValue = rs.getDouble("total_value");
+                totalInvestment += totalValue;
+
+                model.addRow(new Object[]{ticker, quantity, String.format("$%.2f", totalValue)}); // Format totalValue
+            }
+
+            table.setModel(model);
+            totalInvestmentLabel.setText(String.format("Total Investment Value: $%.2f", totalInvestment)); // Format totalInvestment
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void showMessageDialog(String message) {
+        JDialog dialog = new JDialog();
+        dialog.setModal(true);
+        dialog.setSize(400, 100); // Increased width of dialog box
+        dialog.setLocationRelativeTo(null);
+
+        JPanel panel = new JPanel();
+        panel.setBackground(Color.BLACK); // Set dialog background to black
+        JLabel label = new JLabel(message);
+        label.setForeground(Color.WHITE); // Set text color to white
+        panel.add(label);
+
+        JButton okButton = new CustomButton("OK"); // Use CustomButton for consistent styling
+        okButton.addActionListener(e -> dialog.dispose());
+        panel.add(okButton);
+
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+
+    private class CustomButton extends JButton {
+        private Color normalColor = new Color(50, 150, 250);
+        private Color hoverColor = new Color(30, 130, 230);
+        private Color pressedColor = new Color(70, 180, 255);
+        private Border normalBorder = BorderFactory.createEtchedBorder(Color.GRAY, Color.DARK_GRAY);
+        private Border hoverBorder = BorderFactory.createLineBorder(Color.WHITE);
+
+        public CustomButton(String text) {
+            super(text);
+            setBackground(normalColor);
+            setForeground(Color.WHITE);
+            setFont(new Font("Arial", Font.PLAIN, 14));
+            setBorder(normalBorder);
+            setFocusPainted(false);
+            setContentAreaFilled(false);
+            setOpaque(true);
+            setRolloverEnabled(true);
+
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    setBackground(hoverColor);
+                    setBorder(hoverBorder);
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    setBackground(normalColor);
+                    setBorder(normalBorder);
+                }
+
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    setBackground(pressedColor);
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    setBackground(hoverColor);
+                }
+            });
+        }
+    }
+
+    public static void main(String[] args) {
+        connectToDatabase();
+        SwingUtilities.invokeLater(() -> new Investments().setVisible(true));
+    }
+}
+
+
+
+
+
+
+
+
